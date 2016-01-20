@@ -1,0 +1,362 @@
+<?php
+
+/**
+ * @file
+ * Module for the mollie field.
+ */
+
+/**
+ * Implements hook_menu().
+ */
+function mollie_form_field_menu() {
+    // Trigger for the Mollie webhook. Make sure the following path is filled in as webhook in the Mollie API.
+    $items['mollie_api_webhook'] = array(
+        'title' => t('Mollie API Webhook'),
+        'page callback' => 'mollie_form_field_update',
+        'page arguments' => array(),
+        'access callback' => TRUE,
+        'type' => MENU_CALLBACK,
+    );
+
+    $items['admin/config/services/mollie-field'] = array(
+        'title' => t('Mollie Field'),
+        'page callback' => 'drupal_get_form',
+        'page arguments' => array('mollie_form_field_config_form'),
+        'access arguments' => array('administer site configuration'),
+        'type' => MENU_NORMAL_ITEM,
+    );
+
+    return $items;
+}
+
+/**
+ * Implements form API config form.
+ */
+function mollie_form_field_config_form($form, &$form_state) {
+    $form['mollie_field_api_key'] = array(
+        '#type' => 'textfield',
+        '#title' => t('Mollie API Key'),
+        '#default_value' => variable_get('mollie_field_api_key'),
+        '#required' => TRUE,
+    );
+
+    return system_settings_form($form);
+}
+
+/**
+ * Updates the entity with the payment status.
+ */
+function mollie_form_field_update() {
+    if (isset($_POST['id'])) {
+        require libraries_get_path('mollie-api-php') . "/src/Mollie/API/Autoloader.php";
+        $mollie = new Mollie_API_Client;
+        $mollie->setApiKey(variable_get('mollie_field_api_key'));
+        $payment = $mollie->payments->get($_POST['id']);
+
+        $entity_id = $payment->metadata->id;
+        $entity = entity_load_single($payment->metadata->entity_type, $entity_id);
+        $entity->{$payment->metadata->field_name}[LANGUAGE_NONE][0]['status'] = $payment->status;
+
+        entity_save($payment->metadata->entity_type, $entity);
+        print json_encode(array('result' => TRUE));
+    }
+
+    print json_encode(array('result' => FALSE));
+    die;
+}
+
+/**
+ * Implements hook_field_info.
+ */
+function mollie_form_field_field_info() {
+    return array(
+        'mollie_form_field' => array(
+            'label' => t('Mollie Field'),
+            'description' => t('Offers a Mollie implementation.'),
+            'settings' => array('max_length' => 255),
+            'instance_settings' => array(
+                'text_processing' => 0,
+            ),
+            'default_widget' => 'mollie_widget',
+            'default_formatter' => 'mollie_formatter',
+        ),
+    );
+}
+
+/**
+ * Implements hook_field_settings_form.
+ */
+function mollie_form_field_field_settings_form($field, $instance, $has_data) {
+    if ($field['type'] == 'mollie_form_field') {
+        $settings = $field['settings'];
+        $form['use_amount'] = array(
+            '#type' => 'checkbox',
+            '#title' => t('Use Amount'),
+            '#default_value' => isset($settings['use_amount']) ? $settings['use_amount'] : NULL,
+            '#required' => FALSE,
+            '#description' => t('Gives the user the option use a defined price.'),
+        );
+
+        $form['amount'] = array(
+            '#type' => 'textfield',
+            '#title' => t('Amount'),
+            '#default_value' => isset($settings['amount']) ? $settings['amount'] : NULL,
+            '#required' => FALSE,
+            '#element_validate' => array('element_validate_integer_positive'),
+            '#description' => t('the amount the user has to pay while using this field.'),
+            '#states' => array(
+                'visible' => array(
+                    ':input[name="field[settings][use_amount]"]' => array('checked' => TRUE),
+                ),
+            ),
+        );
+
+        $form['use_quantity'] = array(
+            '#type' => 'checkbox',
+            '#title' => t('Use Quantity'),
+            '#default_value' => isset($settings['use_quantity']) ? $settings['use_quantity'] : NULL,
+            '#required' => FALSE,
+            '#description' => t('Gives the user the option to pay for multiple submissions.'),
+        );
+
+        $form['redirect_callback'] = array(
+            '#type' => 'textfield',
+            '#title' => t('Redirect path'),
+            '#default_value' => isset($settings['redirect_callback']) ? $settings['redirect_callback'] : NULL,
+            '#required' => TRUE,
+            '#description' => t('Redirect path after payment submission. Leave empty to redirect to front.'),
+        );
+
+        $form['description'] = array(
+            '#type' => 'textfield',
+            '#title' => t('Payment description'),
+            '#default_value' => isset($settings['description']) ? $settings['description'] : NULL,
+            '#required' => TRUE,
+            '#description' => t('Description for the payment transaction.'),
+        );
+
+        $form['tokens'] = array(
+            '#theme' => 'token_tree_link',
+            '#token_types' => array($instance['entity_type']),
+            '#global_types' => TRUE,
+        );
+
+        return $form;
+    }
+}
+
+/**
+ * Implements hook_field_widget_info.
+ */
+function mollie_form_field_field_widget_info() {
+    return array(
+        'mollie_widget' => array(
+        'label' => t('Mollie Widget'),
+        'field types' => array('mollie_form_field'),
+        ),
+    );
+}
+
+/**
+ * Implements hook_field_widget_form.
+ */
+function mollie_form_field_field_widget_form(&$form, &$form_state, $field, $instance, $langcode, $items, $delta, $element) {
+    if (isset($field['settings']['use_amount']) && $field['settings']['use_amount'] == 0) {
+        $element['amount'] = array(
+            '#type' => 'textfield',
+            '#title' => t('Amount'),
+            '#default_value' => isset($items[0]['amount']) ? $items[0]['amount'] : NULL,
+            '#element_validate' => array('element_validate_number'),
+            '#attributes' => array(
+                'placeholder' => 'Amount',
+            ),
+        );
+    }
+    else if (isset($field['settings']['use_amount']) && $field['settings']['use_amount'] == 1) {
+        $element['amount'] = array(
+            '#type' => 'value',
+            '#value' => $field['settings']['amount'],
+            '#default_value' => isset($items[0]['status']) ? $items[0]['status'] : NULL,
+        );
+    }
+
+    if (isset($field['settings']['use_quantity']) && $field['settings']['use_quantity'] == 1) {
+        $element['quantity'] = array(
+            '#type' => 'textfield',
+            '#title' => t('Quantity'),
+            '#default_value' => isset($items[0]['quantity']) ? $items[0]['quantity'] : NULL,
+            '#element_validate' => array('element_validate_number'),
+            '#attributes' => array(
+                'placeholder' => 'Quantity',
+                'type' => 'number'
+            ),
+        );
+    }
+    else {
+        $element['quantity'] = array(
+            '#type' => 'value',
+            '#value' => 1,
+        );
+    }
+
+    $element['status'] = array(
+        '#type' => 'value',
+        '#value' => 'not-finished',
+        '#default_value' => isset($items[0]['status']) ? $items[0]['status'] : NULL,
+    );
+
+    if (isset($form['#submit'])) {
+        $form_submit_handlers = $form['#submit'];
+    }
+    elseif (isset($form['actions']['submit']['#submit'])) {
+        $form_submit_handlers = $form['actions']['submit']['#submit'];
+    }
+
+    // Exception for entityform module.
+    if (isset($form_state['build_info']['base_form_id']) && $form_state['build_info']['base_form_id'] == 'entityform_edit_form') {
+        $form_submit_handlers[] = 'entityform_edit_form_submit';
+    }
+
+    $form_submit_handlers[] = 'mollie_form_field_element_submit';
+
+    $element['mollie_submit'] = array(
+        '#type' => 'submit',
+        '#value' => 'Submit',
+        '#name' => drupal_html_id('mollie_submit'),
+        '#mollie_field_info' => $field,
+        '#validate' => isset($form['#validate']) ? array_merge($form['#validate'], array('mollie_form_field_element_validate')) : array('mollie_form_field_element_validate'),
+        '#submit' => $form_submit_handlers
+    );
+
+    $form['#after_build'][] = 'mollie_form_field_form_after_build';
+    $form['#after_build'] = array_unique($form['#after_build']);
+
+    return $element;
+}
+
+/**
+ * Form submit handler.
+ */
+function mollie_form_field_element_submit($form, &$form_state) {
+    $field_name = $form_state['triggering_element']['#mollie_field_info']['field_name'];
+    $settings = $form_state['triggering_element']['#mollie_field_info']['settings'];
+
+    $field_values = $form_state['values'][$field_name][LANGUAGE_NONE][0];
+
+    $entity = $form_state['build_info']['args'][0];
+
+    if (isset($settings['use_amount']) && $settings['use_amount'] == 1
+    && isset($settings['use_quantity']) && $settings['use_quantity'] == 1) {
+        $quantity = $field_values['quantity'];
+        $amount = $settings['amount'];
+        $total_amount = $amount * $quantity;
+    }
+    else if (isset($settings['use_amount']) && $settings['use_amount'] == 1) {
+        $total_amount = $settings['amount'];
+    }
+    else if (isset($settings['use_quantity']) && $settings['use_quantity'] == 1) {
+        $total_amount = $field_values['amount'] * $field_values['quantity'];
+    }
+    else {
+        $total_amount = $field_values['amount'];
+    }
+
+    $url = mollie_form_field_mollie_redirect($total_amount, $form['#entity_type'], $entity, $field_name, $settings);
+    $form_state['redirect'] = $url;
+}
+
+/**
+ * Form element validate handler.
+ */
+function mollie_form_field_element_validate($form, &$form_state) {
+    $triggered_button = $form_state['triggering_element']['#mollie_field_info']['field_name'];
+
+    // Small fix for entityform module.
+    $form_state['clicked_button']['#entityform_draft'] = FALSE;
+
+    if (empty($form_state['values'][$triggered_button][LANGUAGE_NONE][0]['quantity'])) {
+        form_set_error($triggered_button . '][und][0][quantity', t('Quantity is required'));
+    }
+}
+
+/**
+ * Form after build.
+ */
+function mollie_form_field_form_after_build($form, &$form_state) {
+    hide($form['actions']);
+    return $form;
+}
+
+/**
+ * Returns a mollie url.
+ */
+function mollie_form_field_mollie_redirect($total_amount, $entity_type, $entity, $field_name, $settings) {
+    require libraries_get_path('mollie-api-php') . "/src/Mollie/API/Autoloader.php";
+
+    $entity_info = entity_get_info($entity_type);
+
+    $mollie = new Mollie_API_Client;
+    $mollie->setApiKey(variable_get('mollie_field_api_key'));
+
+    $description_tokenized = token_replace($settings['description'], array($entity_type => $entity));
+    $redirect_callback_tokenized = token_replace($settings['redirect_callback'], array($entity_type => $entity));
+
+    $payment_info = $mollie->payments->create(array(
+        "amount"      => $total_amount,
+        "redirectUrl" => $redirect_callback_tokenized,
+        "description" => $description_tokenized,
+        "metadata" => array(
+            'entity_type' => $entity_type,
+            'id' => $entity->{$entity_info['entity keys']['id']},
+            'field_name' => $field_name
+        ),
+    ));
+    $payment = $mollie->payments->get($payment_info->id);
+    return $payment->links->paymentUrl;
+}
+
+/**
+ * Empty form element handler for the mollie quantity field.
+ */
+function mollie_form_field_field_is_empty($item, $field) {
+    if (!isset($item['quantity']) || $item['quantity'] == "" && $item['amount']) {
+        return TRUE;
+    }
+    else {
+        return FALSE;
+    }
+}
+
+/**
+ * Implements hook_field_formatter_info.
+ */
+function mollie_form_field_field_formatter_info() {
+    return array(
+        'mollie_formatter' => array(
+            'label' => t('Mollie form field'),
+            'field types' => array('mollie_form_field'),
+        ),
+    );
+}
+
+/**
+ * Implements hook_field_formatter_view.
+ */
+function mollie_form_field_field_formatter_view($entity_type, $entity, $field, $instance, $langcode, $items, $display) {
+    $element = array();
+
+    switch ($display['type']) {
+        case 'mollie_formatter':
+
+            foreach($items as $delta => $item) {
+                foreach ($item as $key => $value) {
+                    $element[$delta][$key]['#prefix'] = '<div class="mollie-form-field-' . $key . '">';
+                    $element[$delta][$key]['#markup'] = $key . ': ' . $value;
+                    $element[$delta][$key]['#suffix'] = '</div>';
+                }
+            }
+            break;
+    }
+
+    return $element;
+}

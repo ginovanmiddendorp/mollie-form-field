@@ -1,0 +1,28 @@
+<?php
+
+/**
+ * Implements hook_field_schema
+ */
+function mollie_form_field_field_schema($field) {
+    $schema = array();
+
+    $schema['columns']['amount'] = array(
+        'type' => 'int',
+        'length' => 255,
+        'not null' => FALSE
+    );
+
+    $schema['columns']['quantity'] = array(
+        'type' => 'int',
+        'length' => 255,
+        'not null' => FALSE
+    );
+
+    $schema['columns']['status'] = array(
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => FALSE
+    );
+
+    return $schema;
+}
