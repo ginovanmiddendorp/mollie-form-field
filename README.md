@@ -1,10 +1,10 @@
 # mollie-form-field
-Offers a form field handling Mollie payments.
+Drupal module that offers a form field handling Mollie payments.
 
 # Installation
 This section describes how to install the module and get it working.
 
-(Please note you need Libraries in order to use the Mollie Form Field module)
+(Please note you need Libraries in order to use the GatherContent module)
 
 1. Upload contents of the mollie-form-field folder to /sites/all/modules/contrib/mollie-form-field/ directory.
 2. Download the Mollie Api for PHP at https://github.com/mollie/mollie-api-php
@@ -14,7 +14,7 @@ This section describes how to install the module and get it working.
 6. Insert your Mollie API Key
 
 # How to use
-This section describes how to use the mollie form field.
+This setion describes how to use the mollie form field.
 
 1. Create a content-type of an entity-form
 2. Add a field of the 'Mollie field' type with the 'Mollie widget'.
