@@ -1,3 +1,4 @@
 name = Mollie form field
 core = 7.x
 package = Mollie
+description = Offers a form field handling Mollie payments
