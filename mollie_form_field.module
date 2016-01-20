@@ -360,3 +360,48 @@ function mollie_form_field_field_formatter_view($entity_type, $entity, $field, $
 
     return $element;
 }
+
+/**
+ * Implements hook_token_info().
+ */
+function mollie_form_field_token_info() {
+    $info['tokens']['entityform']['payment-status'] = array(
+        'name' => t('Payment status'),
+        'description' => t('Returns the status of the payment'),
+    );
+
+    $info['tokens']['node']['payment-status'] = array(
+        'name' => t('Payment status'),
+        'description' => t('Returns the status of the payment'),
+    );
+    return $info;
+}
+
+/**
+ * Implements hook_tokens().
+ */
+function mollie_form_field_tokens($type, $tokens, array $data = array(), array $options = array()) {
+    $replacements = array();
+
+    if ($type == 'entityform' || $type == 'node') {
+        foreach ($tokens as $name => $original) {
+            switch ($name) {
+                case 'payment-status':
+
+                    $replacement = '';
+
+                    foreach ($data[$type] as $key => $value) {
+                        if (strpos($key, 'field_') !== FALSE &&
+                            isset($value[LANGUAGE_NONE][0]['status'])) {
+                            $replacement = $value[LANGUAGE_NONE][0]['status'];
+                        }
+                    }
+
+                    $replacements[$original] = $replacement;
+                    break;
+            }
+        }
+    }
+
+    return $replacements;
+}
