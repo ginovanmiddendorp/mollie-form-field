@@ -18,6 +18,6 @@ This setion describes how to use the mollie form field.
 
 1. Create a content-type of an entity-form
 2. Add a field of the 'Mollie field' type with the 'Mollie widget'.
-3. Under 'Field settings', configure how you want to use this field. For example, you can choose wether you want to use a specified amount the user has to pay, or give the user the option to specify the quantity of the transaction by himself.
+3. Under 'Field settings', configure how you want to use this field. For example, you can choose whether you want to use a specified amount the user has to pay, or give the user the option to specify the quantity of the transaction by himself.
 4. Fill in the redirect path. This is the path the user will be redirected to, after making a payment (Take note that it's possible to use tokens in this field, assuming you have the Token API installed).
 5. Fill in a payment description.
